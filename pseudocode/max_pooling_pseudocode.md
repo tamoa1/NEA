@@ -1,18 +1,3 @@
-# in_tensor has shape [batch, channel, height, width]
-function padding(in_tensor, pool_size):
-    remainder = width % pool_size
-    if remainder == 0:
-        padding = 0
-    else:
-        total_padding_needed = pool_size - remainder
-        padding = total_padding_needed / 2
-
-    if padding == 0:
-        return in_tensor
-    else:
-        in_tensor 
-### COME BAKC AND FINISH PADDING LATER
-
 FUNCTION max_pool(in_tensor, pool_size):
     padded_tensor = padding(in_tensor, pool_size)
     batch_size, channels, height, width = get_dimensions(padded_tensor)

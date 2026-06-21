@@ -1,74 +1,8 @@
-"""Example NCHW tensor generator for convolution prototyping.
-
-Functions:
-- `make_example_input(shape=(1,3,8,8), seed=None)` -> np.ndarray
-
-Also provides a ready-to-import `EXAMPLE_TENSOR`.
-"""
 from __future__ import annotations
-
+from util_functions import make_example_input, show_tensor
+from padding import padding
 import numpy as np
 from typing import Optional, Tuple
-
-
-def make_example_input(shape: Tuple[int, int, int, int] = (1, 3, 8, 8), seed: Optional[int] = None, dtype=np.float32) -> np.ndarray:
-	"""Return a reproducible example tensor shaped `(N, C, H, W)`.
-
-	Args:
-		shape: tuple (N, C, H, W)
-		seed: optional RNG seed for reproducibility
-		dtype: NumPy dtype for returned array
-
-	Returns:
-		NumPy array with values in [0, 1).
-	"""
-	if seed is not None:
-		rng = np.random.RandomState(seed)
-		return rng.rand(*shape).astype(dtype)
-	return np.random.rand(*shape).astype(dtype)
-
-
-# A small ready-to-import example tensor you can use directly.
-EXAMPLE_TENSOR = make_example_input((1, 3, 8, 8), seed=42)
-
-
-
-
-
-
-
-
-
-
-
-
-
-def padding(in_tensor, window_tensor):
-
-    win_size = window_tensor.shape[2]  # Assuming window_tensor is a sqaure
-    if win_size <= 0:
-        return in_tensor
-
-    b, c, h, w = in_tensor.shape
-
-    # How many additional pixels needed on each axis to make the input divisible by the window size
-    h_need = (win_size - (h % win_size)) % win_size
-    w_need = (win_size - (w % win_size)) % win_size
-
-    if h_need == 0 and w_need == 0:
-        return in_tensor
-
-    # Split required padding into each side for each axis
-    h_before = h_need // 2
-    h_after = h_need - h_before
-    w_before = w_need // 2
-    w_after = w_need - w_before
-
-    # padding function from numpy
-    return np.pad(in_tensor, ((0, 0), (0, 0), (h_before, h_after), (w_before, w_after)), mode='constant', constant_values=0)
-        
-
-
 
 
 def convolutional(in_tensor, weight_tensor, stride):
@@ -113,10 +47,6 @@ def convolutional(in_tensor, weight_tensor, stride):
 
     return out_tensor
 
-
-def show_tensor(tensor):
-    for h in range(tensor.shape[2]):
-        print(tensor[0, 0, h, :])
 
 
 EXAMPLE_TENSOR = make_example_input((1, 3, 8, 8), seed=42)

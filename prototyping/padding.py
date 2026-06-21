@@ -1,3 +1,5 @@
+import numpy as np
+
 def padding(in_tensor, window_tensor):
 
     win_size = window_tensor.shape[2]  # Assuming window_tensor is a sqaure

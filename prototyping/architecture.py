@@ -2,10 +2,36 @@ import tensorflow as tf
 import musdb
 import numpy as np
 
-def load_data(set, chunk_len):
+
+
+
+
+def stft(x, n_FFT, hop_length):
+    """inp:
+    x: input audio signal
+    n_FFT: number of FFT bins for STFT (2048 is common)
+    hop_length: hop length for STFT (512 is common with 2048 n_FFT for 75% overlap of windows)
+    out:
+    X: STFT of the input audio signal
+    """
+
+    stft = tf.signal.stft(x, frame_length=n_FFT, frame_step=hop_length, fft_length=n_FFT)                       #tensorflow stft function
+    magnitude = tf.abs(stft)                                                                                    #finding the magnitude of the complex stft output (what we are actually interested in)
+    return magnitude
+
+
+
+
+
+
+
+    
+def load_data(set, chunk_len, n_FFT, hop_length):
     """inp: 
     set: musdb subset to load (train, test, validation)
     chunk_len: length of each chunk in seconds
+    n_FFT: number of FFT bins for STFT (2048 is common)
+    hop_length: hop length for STFT (512 is common with 2048 n_FFT for 75% overlap of windows)
     out:
     X: array of original audio chunks
     Y: array of corresponding drum audio chunks"""
@@ -18,8 +44,8 @@ def load_data(set, chunk_len):
     Y = []
 
     for track in set:
-        mix = track.audio                               #orignal audio
-        drums = track.targets['drums'].audio            #target drum audio
+        mix = track.audio.mean(axis=1)                               #orignal audio
+        drums = track.targets['drums'].audio.mean(axis=1)            #target drum audio
 
         num_chunks = mix.shape[0] // chunk_size         #finding number of chunks in the audio
 
@@ -33,7 +59,6 @@ def load_data(set, chunk_len):
     return np.array(X), np.array(Y)
 
 
-X, Y = load_data("train", chunk_len=5)
 
 
 def conv_block(x, filters):
@@ -86,6 +111,16 @@ def model_def():
 
     outputs = tf.keras.layers.Conv2D(1, (1, 1), activation='sigmoid', padding='same')(c9)
     return tf.keras.Model(inputs=inputs, outputs=outputs)
+
+
+
+
+
+
+X, Y = load_data("train", chunk_len=5, n_FFT=2048, hop_length=512)
+
+
+
 
 
 

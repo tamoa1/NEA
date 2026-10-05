@@ -2,40 +2,60 @@ import numpy as np
 import librosa as lr
 import matplotlib.pyplot as plt
 import musdb
+import time
 
-def load_audio(file_path, sr=44100):
-    """load a mp3 file and return the audio signal and sample rate"""
-    audio, sr = lr.load(file_path, sr=sr)
-    return audio, sr
+
+def load_data(set, chunk_len, n_FFT, hop_length):
+    """inp: 
+    set: musdb subset to load (train, test, validation)
+    chunk_len: length of each chunk in seconds
+    n_FFT: number of FFT bins for STFT (2048 is common)
+    hop_length: hop length for STFT (512 is common with 2048 n_FFT for 75% overlap of windows)
+    out:
+    X: array of original audio chunks
+    Y: array of corresponding drum audio chunks"""
+
+    set = train = musdb.DB(root = "c:\\Users\\toma\\OneDrive\\Documents\\visual studio code\\data\\MUSDB18", subsets=set)
+
+    chunk_size = 44100 * chunk_len                      # chunk_len seconds at 44100 Hz sampling rate
+
+    X_spec = []
+    Y_spec = []
+    
+
+    for track in set:
+        mix = track.audio.mean(axis=1)                               #orignal audio
+        drums = track.targets['drums'].audio.mean(axis=1)            #target drum audio
+
+        num_chunks = mix.shape[0] // chunk_size         #finding number of chunks in the audio
+
+        for i in range(num_chunks):
+            start = i * chunk_size
+            end = start + chunk_size                    #defining the start and end of each chunk
+
+            x_chunk = mix[start:end]
+            y_chunk = drums[start:end]                  #defining the chunks to be transformed into STFT
+
+            X_spec.append(STFT(x_chunk, n_FFT, hop_length))
+            Y_spec.append(STFT(y_chunk, n_FFT, hop_length))         #appending the STFT of the chunks to the respective arrays
+
+    return np.array(X_spec), np.array(Y_spec)
+
+    
+
+
+
 
 
 def STFT(audio, n_fft=2048, hop_length=512):
-    """turn into spectrogram"""
     stft = lr.stft(audio, n_fft=n_fft, hop_length=hop_length)
-    return stft
-
-
-def plot_spectrogram(stft, sr=44100, hop_length=512):
-    """plot the spectrogram of the audio signal"""
-
     magnitude = np.abs(stft)
-    magnitude_db = lr.amplitude_to_db(magnitude, ref=np.max)
-    
-    plt.figure(figsize=(10, 4))
-    plt.imshow(magnitude_db, aspect='auto', origin='lower', cmap='viridis')
-    plt.colorbar(format='%+2.0f dB')
-    plt.title('Spectrogram')
-    plt.xlabel('Time (frames)')
-    plt.ylabel('Frequency (bins)')
-    plt.tight_layout()
-    plt.show()
+    magnitude = magnitude[:-1,:] #remove last frequency bin to make the input size even for the model
 
-
-
-
-
-
-
+    num_frames = magnitude.shape[1] 
+    crop_size = num_frames - (num_frames % 4) #crop the number of frames to be a multiple of 4 for the model
+    magnitude = magnitude[:, :crop_size]
+    return magnitude
 
 
 
@@ -58,7 +78,7 @@ class conv:
 
         scale = np.sqrt(2.0 / (C_in * H_f * W_f))
         self.W = np.random.randn(C_out, C_in, H_f, W_f) * scale                   #He normal initialization of the weights
-        self.b = np.zeros((C_out, 1))                                               #initializing the bias to zero
+        self.b = np.zeros(C_out)                                               #initializing the bias to zero
 
 
         
@@ -142,7 +162,7 @@ class conv:
         dW = np.zeros_like(W)
         db = np.zeros_like(b)           #creating the gradients matrices to be same size as the originals
 
-        db = np.sum(dX_out, axis=(0, 2, 3)).reshape(C_out, 1)  # formula for the bias gradient
+        db = np.sum(dX_out, axis=(0, 2, 3))  # formula for the bias gradient
 
         for b in range(B_in):                   #loop over the batches
             for c_out in range(C_out):          #loop over the filters
@@ -314,7 +334,7 @@ class up_conv:
 
         scale = np.sqrt(2.0 / (C_in * H_f * W_f))
         self.W = np.random.randn(C_out, C_in, H_f, W_f) * scale                   #He normal initialization of the weights
-        self.b = np.zeros((C_out, 1))                                               #initializing the bias to zero
+        self.b = np.zeros(C_out)                                               #initializing the bias to zero
 
     def forward(self, X):
         """Inp:
@@ -381,7 +401,7 @@ class up_conv:
                         dW[c_out] += X[b, :, h, w, None, None] * dX_out[b, c_out, h_start:h_end, w_start:w_end]  # formula for the weight gradient
 
         self.dW = dW
-        db = np.sum(dX_out, axis=(0, 2, 3)).reshape(C_out, 1)  # formula for the bias gradient
+        db = np.sum(dX_out, axis=(0, 2, 3))  # formula for the bias gradient
         self.db = db
 
         return dX
@@ -537,7 +557,7 @@ class Unet:
 
 
     
-def s_gradient_descent(model, X, y, learning_rate=0.01):
+def gradient_descent(model, X, y, learning_rate=0.01):
     params = model.get_parameters()
     for param, grad in params:
         param -= learning_rate * grad  # update the weights and biases using the gradients
@@ -555,7 +575,61 @@ def train(model, X_train, y_train, epochs=10, learning_rate=0.01):
         y_pred = model.forward(X_train)
         loss, grad = mse_loss(y_pred, y_train)
         model.backwards(grad)
-        s_gradient_descent(model, X_train, y_train, learning_rate)
+        gradient_descent(model, X_train, y_train, learning_rate)
         print(f"step {epoch + 1}, Loss: {loss:.4f}")
 
 
+
+def get_batches(X, Y, batch_size):
+    """inp:
+    X: input array of shape (num_chunks, freq_bins, time_frames)
+    Y: target array of shape (num_chunks, freq_bins, time_frames)
+    batch_size: size of each batch
+    out:
+    batches: (X_batch, Y_batch) tuples of shape (batch_size, 1, freq_bins, time_frames)"""
+
+    num_chunks = X.shape[0]
+    indices = np.arange(num_chunks)  
+    np.random.shuffle(indices) # shuffle the data
+
+    for start in range(0, num_chunks, batch_size):
+        end = start + batch_size
+        batch_indices = indices[start:end]
+
+        X_batch = X[batch_indices]
+        Y_batch = Y[batch_indices]
+
+        X_batch = X_batch[:, np.newaxis, :, :]  # add channel dimension
+        Y_batch = Y_batch[:, np.newaxis, :, :] 
+
+        yield X_batch, Y_batch
+
+
+
+start = time.time()
+model = Unet()
+X_train, Y_train = load_data("train", chunk_len=1, n_FFT=1024, hop_length=512)
+lr = 0.01
+epochs = 1
+#checkpoint_every = 0
+
+
+
+for epoch in range(epochs):
+    epoch_loss = 0
+    num_batches = 0
+
+    for X_batch, Y_batch in get_batches(X_train, Y_train, batch_size=1):
+        y_pred = model.forward(X_batch)
+        loss, grad = mse_loss(y_pred, Y_batch)
+        model.backwards(grad)
+        gradient_descent(model, X_batch, Y_batch, lr)
+
+        epoch_loss += loss
+        num_batches += 1
+
+    avg_loss = epoch_loss / num_batches
+    print(f"Epoch {epoch + 1}/{epochs}, Average Loss: {avg_loss:.4f}")
+
+end = time.time()
+print(f"Training time: {end - start:.2f} seconds")

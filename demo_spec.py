@@ -10,14 +10,11 @@ def load_audio(file_path, sr=44100):
 
 
 def STFT(audio, n_fft=2048, hop_length=512):
-    """turn into spectrogram"""
     stft = lr.stft(audio, n_fft=n_fft, hop_length=hop_length)
     return stft
 
 
 def plot_spectrogram(stft, sr=44100, hop_length=512):
-    """plot the spectrogram of the audio signal"""
-
     magnitude = np.abs(stft)
     magnitude_db = lr.amplitude_to_db(magnitude, ref=np.max)
     
